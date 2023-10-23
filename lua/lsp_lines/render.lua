@@ -175,6 +175,8 @@ function M.show(namespace, bufnr, diagnostics, opts, source)
         -- b. Has enough space on the left.
         -- c. Is just one line.
         -- d. Is not an overlap.
+        -- TODO: We can draw at the end of current line?
+        -- TODO: We can draw over following lines?
 
         local msg
         if diagnostic.code then
