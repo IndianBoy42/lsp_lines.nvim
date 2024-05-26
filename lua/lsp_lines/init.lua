@@ -26,6 +26,7 @@ end
 ---@field highlight_whole_line boolean? Highlight empty space to the left of a diagnostic
 ---@field severity vim.diagnostic.SeverityFilter? Severity filter for diagnostics to show
 ---@field update_event string? The event on which to update the lsp_lines
+---@field arrow_width number? 
 
 -- Registers a wrapper-handler to render lsp lines.
 -- This should usually only be called once, during initialisation.
@@ -64,6 +65,7 @@ M.setup = function()
             group = "LspLines",
           })
         end
+
         render.show(ns.user_data.virt_lines_ns, bufnr, diagnostics, opts)
       end
     end,

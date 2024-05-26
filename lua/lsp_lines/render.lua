@@ -172,6 +172,8 @@ function M.show(namespace, bufnr, diagnostics, opts, source)
     prev_col = diagnostic.col
   end
 
+  local arrow_width = opts.virtual_lines and opts.virtual_lines.arrow_width or 4
+  local arrow = string.rep("─", arrow_width)
   for lnum, lelements in pairs(line_stacks) do
     local dont_highlight_whole_line = opts.virtual_lines and (opts.virtual_lines.highlight_whole_line == false)
     if curr_line_opts and lnum == curr_line then
@@ -236,7 +238,7 @@ function M.show(namespace, bufnr, diagnostics, opts, source)
         end
         -- local center_text =
         local center = {
-          { string.format("%s%s", center_symbol, "──── "), highlight_groups[diagnostic.severity] },
+          { string.format("%s%s ", center_symbol, arrow), highlight_groups[diagnostic.severity] },
         }
 
         -- TODO: We can draw on the left side if and only if:
