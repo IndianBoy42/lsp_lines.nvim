@@ -38,12 +38,76 @@ local function distance_between_cols(bufnr, lnum, start_col, end_col)
   end)
 end
 
+---Canonicalize a severity
+---@param severity any
+---@return vim.diagnostic.Severity
+local function to_severity(severity)
+  if type(severity) == 'string' then
+    local s = vim.diagnostic.severity[string.upper(severity)]
+    assert(s and type(s) == "integer", string.format('Invalid severity: %s', severity))
+    return s
+  end
+  return severity
+end
+
+local function severity_filter(sev)
+  local filter
+  if type(sev) ~= "table" then
+    sev = to_severity(sev)
+    filter = function(diag)
+      return diag.severity == sev
+    end
+  elseif sev.max or sev.min then
+    local max = to_severity(sev.max) or vim.diagnostic.severity.ERROR
+    local min = to_severity(sev.min) or vim.diagnostic.severity.HINT
+    filter = function(diag)
+      return diag.severity >= max and diag.severity <= min
+    end
+  else
+    local map = {}
+    for _, s in ipairs(sev) do
+      map[to_severity(s)] = true
+    end
+    filter = function(diag)
+      return map[diag.severity]
+    end
+  end
+  return filter
+end
+
+---render diagnostics
 ---@param namespace number
 ---@param bufnr number
 ---@param diagnostics table
----@param opts boolean|Opts
+---@param opts Opts
 ---@param source 'native'|'coc'|nil If nil, defaults to 'native'.
 function M.show(namespace, bufnr, diagnostics, opts, source)
+  local curr_line_opts = opts.virtual_lines.current_line_opts
+  local curr_line = vim.api.nvim_win_get_cursor(0)[1] - 1
+
+  if opts.virtual_lines and opts.virtual_lines.severity then
+    local filter = severity_filter(opts.virtual_lines.severity)
+    if curr_line_opts and curr_line_opts.severity ~= nil then
+      -- TODO: this could be more efficient
+      local curr_line_filter
+      local rest_filter = filter
+      if curr_line_opts.severity then
+        curr_line_filter = severity_filter(curr_line_opts.severity)
+      else
+        curr_line_filter = function() return true end
+      end
+      filter = function(diag)
+        local is_curr = diag.end_lnum and (curr_line >= diag.lnum and curr_line <= diag.end_lnum)
+            or (curr_line == diag.lnum)
+        if is_curr then
+          return curr_line_filter(diag)
+        else
+          return rest_filter(diag)
+        end
+      end
+    end
+    diagnostics = vim.tbl_filter(filter, diagnostics)
+  end
   if not vim.api.nvim_buf_is_loaded(bufnr) then return end
   vim.validate({
     namespace = { namespace, "n" },
@@ -73,6 +137,7 @@ function M.show(namespace, bufnr, diagnostics, opts, source)
   -- This loop reads line by line, and puts them into stacks with some
   -- extra data, since rendering each line will require understanding what
   -- is beneath it.
+  -- TODO: if the virt_line would go off screen then adjust
   local line_stacks = {}
   local prev_lnum = -1
   local prev_col = 0
@@ -108,6 +173,10 @@ function M.show(namespace, bufnr, diagnostics, opts, source)
   end
 
   for lnum, lelements in pairs(line_stacks) do
+    local dont_highlight_whole_line = opts.virtual_lines and (opts.virtual_lines.highlight_whole_line == false)
+    if curr_line_opts and lnum == curr_line then
+      dont_highlight_whole_line = (curr_line_opts.highlight_whole_line == false) or dont_highlight_whole_line
+    end
     local virt_lines = {}
 
     -- We read in the order opposite to insertion because the last
@@ -117,7 +186,7 @@ function M.show(namespace, bufnr, diagnostics, opts, source)
       if lelements[i][1] == DIAGNOSTIC then
         local diagnostic = lelements[i][2]
         local empty_space_hi
-        if opts.virtual_lines and opts.virtual_lines.highlight_whole_line == false then
+        if dont_highlight_whole_line then
           empty_space_hi = ""
         else
           empty_space_hi = highlight_groups[diagnostic.severity]
